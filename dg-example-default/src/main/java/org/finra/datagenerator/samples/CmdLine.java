@@ -15,13 +15,18 @@
  */
 package org.finra.datagenerator.samples;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Vector;
 
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
+import org.finara.datagenerator.samples.simplecsv.writer.CSVFileWriter;
 import org.finra.datagenerator.consumer.DataConsumer;
 import org.finra.datagenerator.consumer.DataTransformer;
 import org.finra.datagenerator.consumer.EquivalenceClassTransformer;
@@ -52,6 +57,8 @@ public final class CmdLine {
      */
 
     public static void main(String[] args) {
+        long numberOfRows = Long.MAX_VALUE;
+        //long numberOfRows = 100;
         //Adding custom equivalence class generation transformer - NOTE this will get applied during graph traversal-->
         //MODEL USAGE EXAMPLE: <assign name="var_out_V1_2" expr="%ssn"/> <dg:transform name="EQ"/>
         Map<String, DataTransformer> transformers = new HashMap<String, DataTransformer>();
@@ -61,12 +68,13 @@ public final class CmdLine {
         Engine engine = new SCXMLEngine(cte);
 
         //will default to samplemachine, but you could specify a different file if you choose to
-        InputStream is = CmdLine.class.getResourceAsStream("/" + (args.length == 0 ? "samplemachine" : args[0]) + ".xml");
+        InputStream is = CmdLine.class.getResourceAsStream("/" + (args.length == 0 ? "sampledata" : args[0]) + ".xml");
+        String os_path = "./" + (args.length == 0 ? "sampledata" : args[0]) + ".csv";
 
         engine.setModelByInputFileStream(is);
 
         // Usually, this should be more than the number of threads you intend to run
-        engine.setBootstrapMin(1);
+        engine.setBootstrapMin(10);
 
         //Prepare the consumer with the proper writer and transformer
         DataConsumer consumer = new DataConsumer();
@@ -76,16 +84,29 @@ public final class CmdLine {
         //MODEL USAGE EXAMPLE: <dg:assign name="var_out_V2" set="%regex([0-9]{3}[A-Z0-9]{5})"/>
         consumer.addDataTransformer(new EquivalenceClassTransformer());
 
-        consumer.addDataWriter(new DefaultWriter(System.out,
-                new String[]{"var_1_1", "var_1_2", "var_1_3", "var_1_4", "var_1_5", "var_1_6",
-                             "var_2_1", "var_2_2", "var_2_3", "var_2_4", "var_2_5", "var_2_6"}));
+        CSVFileWriter writer;
+        try {
+            writer = new CSVFileWriter(os_path);
+        } catch (IOException e) {
+            System.out.println("ERROR! Can not write to output csv file");
+            return;
+        }
+
+        //consumer.addDataWriter(new DefaultWriter(System.out,
+        //        new String[]{"var_1_1", "var_1_2", "var_1_3", "var_1_4", "var_1_5", "var_1_6",
+        //"var_2_1", "var_2_2", "var_2_3", "var_2_4", "var_2_5", "var_2_6"}));
+
+        consumer.addDataWriter(writer);
 
         //Prepare the distributor
         DefaultDistributor defaultDistributor = new DefaultDistributor();
-        defaultDistributor.setThreadCount(1);
+        defaultDistributor.setThreadCount(8);
+        defaultDistributor.setMaxNumberOfLines(numberOfRows);
         defaultDistributor.setDataConsumer(consumer);
         Logger.getLogger("org.apache").setLevel(Level.WARN);
 
         engine.process(defaultDistributor);
+        writer.closeCSVFile();
     }
+
 }
